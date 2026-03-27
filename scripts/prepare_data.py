@@ -83,6 +83,8 @@ def read_excel():
         rec["name"] = row[2]
         rec["stadtbezirk"] = row[1]
         records.append(rec)
+
+    wb.close()
     return records
 
 
@@ -100,6 +102,7 @@ def calc_z_scores(records, col_idx, exclude_ids=None):
 
     n = len(vals)
     mean = sum(vals.values()) / n
+    # Population std dev (not sample), since these are all Sozialräume, not a sample
     variance = sum((v - mean) ** 2 for v in vals.values()) / n
     std = math.sqrt(variance) if variance > 0 else 1.0
     return {sid: (v - mean) / std for sid, v in vals.items()}
