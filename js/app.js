@@ -44,6 +44,15 @@
     }).addTo(map);
 
     // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+    function esc(str) {
+        if (str == null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // -----------------------------------------------------------------------
     // Style functions
     // -----------------------------------------------------------------------
     function getZValue(props) {
@@ -98,15 +107,15 @@
     function createTooltipContent(props) {
         if (props.unbewohnt) {
             return '<div class="sr-tooltip">'
-                + '<div class="tooltip-name">' + (props.name || 'Unbewohnt') + '</div>'
-                + '<div class="tooltip-id">' + props.SOZIALRAUM_ID + ' \u2014 keine Daten (unbewohnt)</div>'
+                + '<div class="tooltip-name">' + esc(props.name || 'Unbewohnt') + '</div>'
+                + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID) + ' \u2014 keine Daten (unbewohnt)</div>'
                 + '</div>';
         }
         var typ = getTyp(props) || '\u2013';
         return '<div class="sr-tooltip">'
-            + '<div class="tooltip-name">' + props.name + '</div>'
-            + '<div class="tooltip-id">' + props.SOZIALRAUM_ID
-            + ' \u00b7 ' + LAYER_TITLES[currentLayer] + ': ' + typ + '</div>'
+            + '<div class="tooltip-name">' + esc(props.name) + '</div>'
+            + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID)
+            + ' \u00b7 ' + LAYER_TITLES[currentLayer] + ': ' + esc(typ) + '</div>'
             + '</div>';
     }
 
@@ -171,15 +180,15 @@
     function createPopupContent(props) {
         if (props.unbewohnt) {
             return '<div class="sr-popup">'
-                + '<h3>' + (props.name || 'Unbewohnt')
-                + ' <span class="popup-id">(' + props.SOZIALRAUM_ID + ')</span></h3>'
+                + '<h3>' + esc(props.name || 'Unbewohnt')
+                + ' <span class="popup-id">(' + esc(props.SOZIALRAUM_ID) + ')</span></h3>'
                 + '<p class="unbewohnt-msg">Keine Daten \u2013 unbewohnter Sozialraum</p>'
                 + '</div>';
         }
 
         var html = '<div class="sr-popup">';
-        html += '<h3>' + props.name + ' <span class="popup-id">(' + props.SOZIALRAUM_ID + ')</span></h3>';
-        html += '<div class="popup-bezirk">Stadtbezirk ' + props.stadtbezirk + '</div>';
+        html += '<h3>' + esc(props.name) + ' <span class="popup-id">(' + esc(props.SOZIALRAUM_ID) + ')</span></h3>';
+        html += '<div class="popup-bezirk">Stadtbezirk ' + esc(props.stadtbezirk) + '</div>';
 
         // Index overview
         html += '<div class="popup-indices">';
@@ -226,6 +235,11 @@
             return createTooltipContent(feature.properties);
         }, { sticky: true, className: '' });
 
+        layer.bindPopup(createPopupContent(feature.properties), {
+            maxWidth: 340,
+            maxHeight: 420,
+        });
+
         layer.on({
             mouseover: function (e) {
                 if (!feature.properties.unbewohnt) {
@@ -238,16 +252,16 @@
             },
             click: function (e) {
                 map.fitBounds(e.target.getBounds(), { padding: [50, 50] });
-                e.target.bindPopup(createPopupContent(feature.properties), {
-                    maxWidth: 340,
-                    maxHeight: 420,
-                }).openPopup();
+                e.target.openPopup();
             },
         });
     }
 
     fetch('data/sozialraeume.geojson')
-        .then(function (response) { return response.json(); })
+        .then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        })
         .then(function (data) {
             geojsonLayer = L.geoJSON(data, {
                 style: getStyle,
@@ -256,6 +270,11 @@
 
             createLegend();
             setupLayerControl();
+        })
+        .catch(function (err) {
+            console.error('GeoJSON laden fehlgeschlagen:', err);
+            document.getElementById('legend').innerHTML =
+                '<p style="color:#c00;padding:8px;font-size:13px">Kartendaten konnten nicht geladen werden.</p>';
         });
 
     // -----------------------------------------------------------------------
