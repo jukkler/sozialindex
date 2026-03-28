@@ -36,10 +36,24 @@ FLUKTUATION_INDICATORS = [
     (24, "fluktuationsrate", False),
 ]
 
-# Raw indicators to include in output GeoJSON: (excel_col_index, property_key)
-RAW_PROPERTIES = [
+# All data columns to include in output: (excel_col_index, property_key)
+ALL_COLUMNS = [
     (3,  "bevoelkerung"),
     (4,  "weiblich_pct"),
+    (5,  "u6"),
+    (6,  "u6_pct"),
+    (7,  "a6_17"),
+    (8,  "a6_17_pct"),
+    (9,  "a18_29"),
+    (10, "a18_29_pct"),
+    (11, "a30_49"),
+    (12, "a30_49_pct"),
+    (13, "a50_64"),
+    (14, "a50_64_pct"),
+    (15, "a65_79"),
+    (16, "a65_79_pct"),
+    (17, "a80plus"),
+    (18, "a80plus_pct"),
     (19, "jugendquotient"),
     (20, "altenquotient"),
     (21, "auslaender_pct"),
@@ -59,12 +73,19 @@ RAW_PROPERTIES = [
     (35, "altersarmut_pct"),
     (36, "mindestsicherung_pct"),
     (37, "wohngeld_hh_pct"),
+    (38, "schueler_primar"),
+    (39, "schueler_sekundar"),
+    (40, "hauptschule_pct"),
+    (41, "realschule_pct"),
+    (42, "gymnasium_pct"),
+    (43, "gesamtschule_pct"),
     (44, "uebergang_gym_pct"),
     (45, "wohnflaeche_m2_ew"),
     (46, "oeff_gef_whg_pct"),
     (47, "wohneigentum_pct"),
     (48, "flaeche_ha"),
     (49, "bev_dichte_km2"),
+    (50, "wohnflaechenanteil_pct"),
     (51, "gruenflaeche_pct"),
 ]
 
@@ -168,11 +189,20 @@ def process_indices(records):
         if src in idx:
             idx[tgt] = idx[src]
 
-    return idx_sozial, idx_flukt, sozial_z_by_key, flukt_z_by_key
+    return idx_sozial, idx_flukt
 
 
-def build_enriched_properties(records, idx_sozial, idx_flukt, sozial_z_by_key, flukt_z_by_key):
+def build_enriched_properties(records, idx_sozial, idx_flukt):
     """Build a dict {sozialraum_id: {property_key: value, ...}} for GeoJSON merge."""
+    exclude = {UNBEWOHNT_ID}
+
+    # Pre-calculate z-scores for every numeric column
+    all_z = {}
+    for col_idx, key in ALL_COLUMNS:
+        z = calc_z_scores(records, col_idx, exclude)
+        if z:
+            all_z[key] = z
+
     enriched = {}
     for rec in records:
         sid = rec["id"]
@@ -182,9 +212,11 @@ def build_enriched_properties(records, idx_sozial, idx_flukt, sozial_z_by_key, f
             "unbewohnt": sid == UNBEWOHNT_ID,
         }
 
-        for col_idx, key in RAW_PROPERTIES:
+        # Raw indicator values
+        for col_idx, key in ALL_COLUMNS:
             props[key] = rec.get(col_idx)
 
+        # Composite indices
         zs = idx_sozial.get(sid)
         zf = idx_flukt.get(sid)
         props["z_sozial"] = round(zs, 4) if zs is not None else None
@@ -192,9 +224,8 @@ def build_enriched_properties(records, idx_sozial, idx_flukt, sozial_z_by_key, f
         props["typ_sozial"] = classify_z(zs)
         props["typ_fluktuation"] = classify_z(zf)
 
-        for key, z_dict in sozial_z_by_key.items():
-            props[f"z_{key}"] = round(z_dict[sid], 4) if sid in z_dict else None
-        for key, z_dict in flukt_z_by_key.items():
+        # Individual z-scores for every indicator
+        for key, z_dict in all_z.items():
             props[f"z_{key}"] = round(z_dict[sid], 4) if sid in z_dict else None
 
         enriched[sid] = props
@@ -230,11 +261,11 @@ if __name__ == "__main__":
     print(f"  {len(records)} records")
 
     print("Calculating z-Werte...")
-    idx_sozial, idx_flukt, sozial_z_by_key, flukt_z_by_key = process_indices(records)
+    idx_sozial, idx_flukt = process_indices(records)
     print(f"  Sozial: {len(idx_sozial)} | Fluktuation: {len(idx_flukt)}")
 
     print("Building properties...")
-    enriched = build_enriched_properties(records, idx_sozial, idx_flukt, sozial_z_by_key, flukt_z_by_key)
+    enriched = build_enriched_properties(records, idx_sozial, idx_flukt)
 
     print("Merging into GeoJSON...")
     merge_geojson(enriched)

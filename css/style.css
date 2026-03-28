@@ -31,7 +31,7 @@ html, body {
     padding: 12px 16px;
     border-radius: 6px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    max-width: 220px;
+    max-width: 260px;
 }
 
 #layer-control h3 {
@@ -43,15 +43,14 @@ html, body {
     letter-spacing: 0.5px;
 }
 
-#layer-control label {
-    display: block;
-    padding: 4px 0;
-    cursor: pointer;
+#layer-select {
+    width: 100%;
+    padding: 5px 8px;
     font-size: 13px;
-}
-
-#layer-control input[type="radio"] {
-    margin-right: 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
 }
 
 /* === Legend === */

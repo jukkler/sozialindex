@@ -25,10 +25,116 @@
         { typ: 'hoch',          label: 'hoch',           range: '\u2265 +1,0' },
     ];
 
-    var LAYER_TITLES = {
-        sozial: 'Sozialer Handlungsbedarf',
-        fluktuation: 'Fluktuation',
-    };
+    // All available layers, grouped by category
+    // Each entry: [propertyKey, displayLabel]
+    // z-score property is always 'z_' + propertyKey
+    var CATEGORIES = [
+        ['Indizes', [
+            ['sozial', 'Sozialer Handlungsbedarf'],
+            ['fluktuation', 'Fluktuation'],
+        ]],
+        ['Bev\u00f6lkerung', [
+            ['bevoelkerung', 'Bev\u00f6lkerung'],
+            ['weiblich_pct', 'Weiblich (%)'],
+            ['u6', '< 6 Jahre'],
+            ['u6_pct', '< 6 Jahre (%)'],
+            ['a6_17', '6\u201317'],
+            ['a6_17_pct', '6\u201317 (%)'],
+            ['a18_29', '18\u201329'],
+            ['a18_29_pct', '18\u201329 (%)'],
+            ['a30_49', '30\u201349'],
+            ['a30_49_pct', '30\u201349 (%)'],
+            ['a50_64', '50\u201364'],
+            ['a50_64_pct', '50\u201364 (%)'],
+            ['a65_79', '65\u201379'],
+            ['a65_79_pct', '65\u201379 (%)'],
+            ['a80plus', '80+'],
+            ['a80plus_pct', '80+ (%)'],
+            ['jugendquotient', 'Jugendquotient'],
+            ['altenquotient', 'Altenquotient'],
+            ['auslaender_pct', 'Ausl\u00e4nder (%)'],
+            ['migration_pct', 'Migrationshintergrund (%)'],
+        ]],
+        ['Wanderung', [
+            ['wanderungssaldo', 'Wanderungssaldo'],
+            ['fluktuationsrate', 'Fluktuationsrate'],
+        ]],
+        ['Haushalte', [
+            ['haushalte', 'Haushalte'],
+            ['einpersonen_hh_pct', 'Einpersonen-HH (%)'],
+            ['hh_kinder_pct', 'HH mit Kindern (%)'],
+            ['alleinerziehende_pct', 'Alleinerziehende (%)'],
+            ['senioren_single_pct', 'Senioren-Single (%)'],
+        ]],
+        ['Arbeit & Soziales', [
+            ['arbeitslose', 'Arbeitslose'],
+            ['arbeitslosenquote_pct', 'Arbeitslosenquote (%)'],
+            ['sgb2_personen', 'SGB-II-Personen'],
+            ['sgb2_quote_pct', 'SGB-II-Quote (%)'],
+            ['kinderarmut_pct', 'Kinderarmut (%)'],
+            ['altersarmut_pct', 'Altersarmut (%)'],
+            ['mindestsicherung_pct', 'Mindestsicherung (%)'],
+            ['wohngeld_hh_pct', 'Wohngeld-HH (%)'],
+        ]],
+        ['Bildung', [
+            ['schueler_primar', 'Sch\u00fcler Primar'],
+            ['schueler_sekundar', 'Sch\u00fcler Sekundar'],
+            ['hauptschule_pct', 'Hauptschule (%)'],
+            ['realschule_pct', 'Realschule (%)'],
+            ['gymnasium_pct', 'Gymnasium (%)'],
+            ['gesamtschule_pct', 'Gesamtschule (%)'],
+            ['uebergang_gym_pct', '\u00dcbergang Gymnasium (%)'],
+        ]],
+        ['Wohnen & Fl\u00e4che', [
+            ['wohnflaeche_m2_ew', 'Wohnfl\u00e4che (m\u00b2/EW)'],
+            ['oeff_gef_whg_pct', '\u00d6ff. gef. Wohnungen (%)'],
+            ['wohneigentum_pct', 'Wohneigentum (%)'],
+            ['flaeche_ha', 'Fl\u00e4che (ha)'],
+            ['bev_dichte_km2', 'Bev.-Dichte (/km\u00b2)'],
+            ['wohnflaechenanteil_pct', 'Wohnfl\u00e4chenanteil (%)'],
+            ['gruenflaeche_pct', 'Gr\u00fcnfl\u00e4che (%)'],
+        ]],
+    ];
+
+    // Build lookup: key → label
+    var LAYER_LABELS = {};
+    CATEGORIES.forEach(function (cat) {
+        cat[1].forEach(function (item) {
+            LAYER_LABELS[item[0]] = item[1];
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+    function esc(str) {
+        if (str == null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function classifyZ(z) {
+        if (z == null) return null;
+        if (z < -1.0) return 'gering';
+        if (z < -0.5) return 'eher gering';
+        if (z < 0.5)  return 'mittel';
+        if (z < 1.0)  return 'erh\u00f6ht';
+        return 'hoch';
+    }
+
+    function typCssClass(typ) {
+        if (!typ) return 'typ-mittel';
+        return 'typ-' + typ.replace(/\s+/g, '-').replace(/\u00f6/g, 'oe');
+    }
+
+    function formatValue(val, unit) {
+        if (val == null) return '\u2013';
+        if (typeof val === 'number') {
+            var formatted = val.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+            return unit ? formatted + ' ' + unit : formatted;
+        }
+        return String(val);
+    }
 
     // -----------------------------------------------------------------------
     // Map setup
@@ -44,23 +150,10 @@
     }).addTo(map);
 
     // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
-    function esc(str) {
-        if (str == null) return '';
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    // -----------------------------------------------------------------------
     // Style functions
     // -----------------------------------------------------------------------
     function getZValue(props) {
-        return currentLayer === 'sozial' ? props.z_sozial : props.z_fluktuation;
-    }
-
-    function getTyp(props) {
-        return currentLayer === 'sozial' ? props.typ_sozial : props.typ_fluktuation;
+        return props['z_' + currentLayer];
     }
 
     function getColor(z) {
@@ -111,11 +204,14 @@
                 + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID) + ' \u2014 keine Daten (unbewohnt)</div>'
                 + '</div>';
         }
-        var typ = getTyp(props) || '\u2013';
+        var z = getZValue(props);
+        var typ = classifyZ(z) || '\u2013';
+        var rawVal = props[currentLayer];
+        var rawStr = rawVal != null ? formatValue(rawVal, '') + ' \u2013 ' : '';
         return '<div class="sr-tooltip">'
             + '<div class="tooltip-name">' + esc(props.name) + '</div>'
             + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID)
-            + ' \u00b7 ' + LAYER_TITLES[currentLayer] + ': ' + esc(typ) + '</div>'
+            + ' \u00b7 ' + esc(LAYER_LABELS[currentLayer]) + ': ' + rawStr + typ + '</div>'
             + '</div>';
     }
 
@@ -124,10 +220,10 @@
     // -----------------------------------------------------------------------
     var POPUP_SECTIONS = [
         {
-            title: 'Bevölkerung',
+            title: 'Bev\u00f6lkerung',
             rows: [
                 ['bevoelkerung', 'Einwohner', ''],
-                ['auslaender_pct', 'Ausländer', '%'],
+                ['auslaender_pct', 'Ausl\u00e4nder', '%'],
                 ['migration_pct', 'Migrationshintergrund', '%'],
                 ['jugendquotient', 'Jugendquotient', ''],
                 ['altenquotient', 'Altenquotient', ''],
@@ -147,7 +243,7 @@
         {
             title: 'Bildung',
             rows: [
-                ['uebergang_gym_pct', 'Übergang Gymnasium', '%'],
+                ['uebergang_gym_pct', '\u00dcbergang Gymnasium', '%'],
             ],
         },
         {
@@ -155,27 +251,13 @@
             rows: [
                 ['fluktuationsrate', 'Fluktuationsrate', ''],
                 ['wanderungssaldo', 'Wanderungssaldo', '\u2030'],
-                ['wohnflaeche_m2_ew', 'Wohnfläche', 'm\u00b2/EW'],
+                ['wohnflaeche_m2_ew', 'Wohnfl\u00e4che', 'm\u00b2/EW'],
                 ['wohneigentum_pct', 'Wohneigentum', '%'],
-                ['oeff_gef_whg_pct', 'Öff. gef. Wohnungen', '%'],
-                ['bev_dichte_km2', 'Bevölkerungsdichte', '/km\u00b2'],
+                ['oeff_gef_whg_pct', '\u00d6ff. gef. Wohnungen', '%'],
+                ['bev_dichte_km2', 'Bev\u00f6lkerungsdichte', '/km\u00b2'],
             ],
         },
     ];
-
-    function typCssClass(typ) {
-        if (!typ) return 'typ-mittel';
-        return 'typ-' + typ.replace(/\s+/g, '-').replace(/ö/g, 'oe');
-    }
-
-    function formatValue(val, unit) {
-        if (val == null) return '\u2013';
-        if (typeof val === 'number') {
-            var formatted = val.toLocaleString('de-DE', { maximumFractionDigits: 1 });
-            return unit ? formatted + ' ' + unit : formatted;
-        }
-        return String(val);
-    }
 
     function createPopupContent(props) {
         if (props.unbewohnt) {
@@ -281,14 +363,28 @@
     // Layer control
     // -----------------------------------------------------------------------
     function setupLayerControl() {
-        var radios = document.querySelectorAll('#layer-control input[name="layer"]');
-        for (var i = 0; i < radios.length; i++) {
-            radios[i].addEventListener('change', function () {
-                currentLayer = this.value;
-                geojsonLayer.setStyle(getStyle);
-                updateLegend();
-            });
+        var select = document.getElementById('layer-select');
+
+        // Build <optgroup> + <option> from CATEGORIES
+        for (var c = 0; c < CATEGORIES.length; c++) {
+            var cat = CATEGORIES[c];
+            var group = document.createElement('optgroup');
+            group.label = cat[0];
+            for (var i = 0; i < cat[1].length; i++) {
+                var opt = document.createElement('option');
+                opt.value = cat[1][i][0];
+                opt.textContent = cat[1][i][1];
+                if (cat[1][i][0] === currentLayer) opt.selected = true;
+                group.appendChild(opt);
+            }
+            select.appendChild(group);
         }
+
+        select.addEventListener('change', function () {
+            currentLayer = this.value;
+            geojsonLayer.setStyle(getStyle);
+            updateLegend();
+        });
     }
 
     // -----------------------------------------------------------------------
@@ -300,7 +396,7 @@
 
     function updateLegend() {
         var container = document.getElementById('legend');
-        var html = '<h4>' + LAYER_TITLES[currentLayer] + '</h4>';
+        var html = '<h4>' + esc(LAYER_LABELS[currentLayer]) + '</h4>';
 
         for (var i = 0; i < TYP_LABELS.length; i++) {
             var item = TYP_LABELS[i];
