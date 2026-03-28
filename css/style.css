@@ -196,9 +196,17 @@ html, body {
     font-size: 12px;
 }
 
-.sr-popup td:last-child {
+.sr-popup td:nth-child(2) {
     text-align: right;
     font-weight: 500;
+}
+
+.sr-popup td.popup-avg {
+    text-align: right;
+    color: #888;
+    font-size: 11px;
+    padding-left: 6px;
+    white-space: nowrap;
 }
 
 .sr-popup .unbewohnt-msg {
@@ -217,11 +225,11 @@ html, body {
     font-weight: 600;
 }
 
-.typ-gering         { background: #2d8e4e; color: white; }
-.typ-eher-gering    { background: #8cc68c; color: #1a4d2e; }
-.typ-mittel          { background: #e8e8e8; color: #555; }
-.typ-erhoeht         { background: #f4b084; color: #7a3a00; }
-.typ-hoch            { background: #e05070; color: white; }
+.typ-gering         { background: #1a9850; color: white; }
+.typ-eher-gering    { background: #91cf60; color: #1a5a2e; }
+.typ-mittel          { background: #fee08b; color: #665a00; }
+.typ-erhoeht         { background: #fc8d59; color: #7a3200; }
+.typ-hoch            { background: #d73027; color: white; }
 
 /* === Tooltip === */
 .sr-tooltip {

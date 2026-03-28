@@ -9,20 +9,20 @@
     var currentLayer = 'sozial';
 
     var COLORS = {
-        gering:        '#2d8e4e',
-        'eher gering': '#8cc68c',
-        mittel:        '#f0f0f0',
-        'erhöht':      '#f4b084',
-        hoch:          '#e05070',
+        gering:        '#1a9850',
+        'eher gering': '#91cf60',
+        mittel:        '#fee08b',
+        'erhöht':      '#fc8d59',
+        hoch:          '#d73027',
         unbewohnt:     '#d3d3d3',
     };
 
     var TYP_LABELS = [
-        { typ: 'gering',        label: 'gering',        range: 'z < \u22121,0' },
-        { typ: 'eher gering',   label: 'eher gering',   range: '\u22121,0 bis < \u22120,5' },
-        { typ: 'mittel',        label: 'mittel',         range: '\u22120,5 bis < +0,5' },
-        { typ: 'erhöht',        label: 'erhöht',         range: '+0,5 bis < +1,0' },
-        { typ: 'hoch',          label: 'hoch',           range: '\u2265 +1,0' },
+        { typ: 'gering',        label: 'deutlich unter \u00d8' },
+        { typ: 'eher gering',   label: 'unter \u00d8' },
+        { typ: 'mittel',        label: 'Durchschnitt' },
+        { typ: 'erh\u00f6ht',   label: '\u00fcber \u00d8' },
+        { typ: 'hoch',          label: 'deutlich \u00fcber \u00d8' },
     ];
 
     // All available layers, grouped by category
@@ -32,23 +32,17 @@
         ['Indizes', [
             ['sozial', 'Sozialer Handlungsbedarf'],
             ['fluktuation', 'Fluktuation'],
+            ['qol', 'Quality of Life'],
         ]],
         ['Bev\u00f6lkerung', [
             ['bevoelkerung', 'Bev\u00f6lkerung'],
             ['weiblich_pct', 'Weiblich (%)'],
-            ['u6', '< 6 Jahre'],
             ['u6_pct', '< 6 Jahre (%)'],
-            ['a6_17', '6\u201317'],
             ['a6_17_pct', '6\u201317 (%)'],
-            ['a18_29', '18\u201329'],
             ['a18_29_pct', '18\u201329 (%)'],
-            ['a30_49', '30\u201349'],
             ['a30_49_pct', '30\u201349 (%)'],
-            ['a50_64', '50\u201364'],
             ['a50_64_pct', '50\u201364 (%)'],
-            ['a65_79', '65\u201379'],
             ['a65_79_pct', '65\u201379 (%)'],
-            ['a80plus', '80+'],
             ['a80plus_pct', '80+ (%)'],
             ['jugendquotient', 'Jugendquotient'],
             ['altenquotient', 'Altenquotient'],
@@ -60,16 +54,13 @@
             ['fluktuationsrate', 'Fluktuationsrate'],
         ]],
         ['Haushalte', [
-            ['haushalte', 'Haushalte'],
             ['einpersonen_hh_pct', 'Einpersonen-HH (%)'],
             ['hh_kinder_pct', 'HH mit Kindern (%)'],
             ['alleinerziehende_pct', 'Alleinerziehende (%)'],
             ['senioren_single_pct', 'Senioren-Single (%)'],
         ]],
         ['Arbeit & Soziales', [
-            ['arbeitslose', 'Arbeitslose'],
             ['arbeitslosenquote_pct', 'Arbeitslosenquote (%)'],
-            ['sgb2_personen', 'SGB-II-Personen'],
             ['sgb2_quote_pct', 'SGB-II-Quote (%)'],
             ['kinderarmut_pct', 'Kinderarmut (%)'],
             ['altersarmut_pct', 'Altersarmut (%)'],
@@ -77,8 +68,6 @@
             ['wohngeld_hh_pct', 'Wohngeld-HH (%)'],
         ]],
         ['Bildung', [
-            ['schueler_primar', 'Sch\u00fcler Primar'],
-            ['schueler_sekundar', 'Sch\u00fcler Sekundar'],
             ['hauptschule_pct', 'Hauptschule (%)'],
             ['realschule_pct', 'Realschule (%)'],
             ['gymnasium_pct', 'Gymnasium (%)'],
@@ -122,8 +111,17 @@
         return 'hoch';
     }
 
+    var QOL_CSS_MAP = {
+        'hoch': 'typ-gering',
+        'leicht \u00fcberdurchschn.': 'typ-eher-gering',
+        'durchschnittlich': 'typ-mittel',
+        'leicht unterdurchschn.': 'typ-erhoeht',
+        'niedrig': 'typ-hoch',
+    };
+
     function typCssClass(typ) {
         if (!typ) return 'typ-mittel';
+        if (QOL_CSS_MAP[typ]) return QOL_CSS_MAP[typ];
         return 'typ-' + typ.replace(/\s+/g, '-').replace(/\u00f6/g, 'oe');
     }
 
@@ -204,14 +202,30 @@
                 + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID) + ' \u2014 keine Daten (unbewohnt)</div>'
                 + '</div>';
         }
-        var z = getZValue(props);
-        var typ = classifyZ(z) || '\u2013';
         var rawVal = props[currentLayer];
-        var rawStr = rawVal != null ? formatValue(rawVal, '') + ' \u2013 ' : '';
+        var avg = averages[currentLayer];
+        var z = getZValue(props);
+        var typ = classifyZ(z);
+        var parts = esc(LAYER_LABELS[currentLayer]) + ': ';
+        if (currentLayer === 'qol') {
+            var qi = props.qol_index;
+            var rang = props.qol_rang;
+            if (qi != null) {
+                parts += (props.qol_klasse || '\u2013') + ' (Rang ' + rang + ')';
+            } else {
+                parts += '\u2013';
+            }
+        } else if (rawVal != null) {
+            parts += formatValue(rawVal, '');
+            if (avg != null) parts += ' (\u00d8 ' + formatValue(avg, '') + ')';
+        } else if (typ) {
+            parts += typ;
+        } else {
+            parts += '\u2013';
+        }
         return '<div class="sr-tooltip">'
             + '<div class="tooltip-name">' + esc(props.name) + '</div>'
-            + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID)
-            + ' \u00b7 ' + esc(LAYER_LABELS[currentLayer]) + ': ' + rawStr + typ + '</div>'
+            + '<div class="tooltip-id">' + esc(props.SOZIALRAUM_ID) + ' \u00b7 ' + parts + '</div>'
             + '</div>';
     }
 
@@ -275,17 +289,18 @@
         // Index overview
         html += '<div class="popup-indices">';
         var indices = [
-            { label: 'Sozialer Handlungsbedarf', typ: props.typ_sozial, z: props.z_sozial },
-            { label: 'Fluktuation', typ: props.typ_fluktuation, z: props.z_fluktuation },
+            { label: 'Sozialer Handlungsbedarf', typ: props.typ_sozial },
+            { label: 'Fluktuation', typ: props.typ_fluktuation },
+            { label: 'Quality of Life', typ: props.qol_klasse, rang: props.qol_rang },
         ];
         for (var i = 0; i < indices.length; i++) {
             var idx = indices[i];
-            var zStr = idx.z != null ? idx.z.toFixed(2) : '\u2013';
             html += '<div class="popup-index-row">';
             html += '<span class="popup-index-label">' + idx.label + '</span>';
+            var extra = idx.rang != null ? ' (Rang ' + idx.rang + ')' : '';
             html += '<span class="popup-index-value">'
                 + '<span class="typ-badge ' + typCssClass(idx.typ) + '">' + (idx.typ || '\u2013') + '</span>'
-                + '<span class="popup-z">(z = ' + zStr + ')</span>'
+                + extra
                 + '</span>';
             html += '</div>';
         }
@@ -298,7 +313,11 @@
             html += '<table>';
             for (var r = 0; r < section.rows.length; r++) {
                 var row = section.rows[r];
-                html += '<tr><td>' + row[1] + '</td><td>' + formatValue(props[row[0]], row[2]) + '</td></tr>';
+                var avg = averages[row[0]];
+                var avgStr = avg != null ? formatValue(avg, row[2]) : '';
+                html += '<tr><td>' + row[1] + '</td>'
+                    + '<td>' + formatValue(props[row[0]], row[2]) + '</td>'
+                    + '<td class="popup-avg">' + (avgStr ? '\u00d8 ' + avgStr : '') + '</td></tr>';
             }
             html += '</table>';
         }
@@ -311,6 +330,7 @@
     // GeoJSON layer
     // -----------------------------------------------------------------------
     var geojsonLayer;
+    var averages = {};
 
     function onEachFeature(feature, layer) {
         layer.bindTooltip(function () {
@@ -345,6 +365,7 @@
             return response.json();
         })
         .then(function (data) {
+            averages = data.averages || {};
             geojsonLayer = L.geoJSON(data, {
                 style: getStyle,
                 onEachFeature: onEachFeature,
@@ -402,7 +423,7 @@
             var item = TYP_LABELS[i];
             html += '<div class="legend-item">';
             html += '<span class="legend-color" style="background:' + COLORS[item.typ] + '"></span>';
-            html += '<span class="legend-label">' + item.label + ' <small>(' + item.range + ')</small></span>';
+            html += '<span class="legend-label">' + item.label + '</span>';
             html += '</div>';
         }
 

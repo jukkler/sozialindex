@@ -1,0 +1,12 @@
+# Source/build files (not needed for deployment)
+Quartiersatlas_2024_Daten.xlsx
+QoL_Index_Duesseldorf*.xlsx
+Sozialräume_WGS84_4326_0.geojson
+*.pdf
+
+# Dev artifacts
+scripts/
+docs/
+Spec_Sheet_*.md
+__pycache__/
+*.pyc
