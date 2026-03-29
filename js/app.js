@@ -17,17 +17,6 @@
         unbewohnt:     '#d3d3d3',
     };
 
-    var TYP_LABELS = [
-        { typ: 'gering',        label: 'deutlich unter \u00d8' },
-        { typ: 'eher gering',   label: 'unter \u00d8' },
-        { typ: 'mittel',        label: 'Durchschnitt' },
-        { typ: 'erh\u00f6ht',   label: '\u00fcber \u00d8' },
-        { typ: 'hoch',          label: 'deutlich \u00fcber \u00d8' },
-    ];
-
-    // All available layers, grouped by category
-    // Each entry: [propertyKey, displayLabel]
-    // z-score property is always 'z_' + propertyKey
     var CATEGORIES = [
         ['Indizes', [
             ['sozial', 'Sozialer Handlungsbedarf'],
@@ -85,7 +74,6 @@
         ]],
     ];
 
-    // Build lookup: key → label
     var LAYER_LABELS = {};
     CATEGORIES.forEach(function (cat) {
         cat[1].forEach(function (item) {
@@ -154,12 +142,28 @@
         return props['z_' + currentLayer];
     }
 
+    var GRADIENT_STOPS = [
+        { z: -1.5, r: 26,  g: 152, b: 80  },  // #1a9850
+        { z: -1.0, r: 26,  g: 152, b: 80  },
+        { z: -0.5, r: 145, g: 207, b: 96  },  // #91cf60
+        { z:  0.0, r: 254, g: 224, b: 139 },  // #fee08b
+        { z:  0.5, r: 252, g: 141, b: 89  },  // #fc8d59
+        { z:  1.0, r: 215, g: 48,  b: 39  },  // #d73027
+        { z:  1.5, r: 215, g: 48,  b: 39  },
+    ];
+
     function getColor(z) {
         if (z == null) return COLORS.unbewohnt;
-        if (z < -1.0) return COLORS.gering;
-        if (z < -0.5) return COLORS['eher gering'];
-        if (z < 0.5)  return COLORS.mittel;
-        if (z < 1.0)  return COLORS['erhöht'];
+        z = Math.max(-1.5, Math.min(1.5, z));
+        for (var i = 0; i < GRADIENT_STOPS.length - 1; i++) {
+            var a = GRADIENT_STOPS[i], b = GRADIENT_STOPS[i + 1];
+            if (z <= b.z) {
+                var t = (b.z === a.z) ? 0 : (z - a.z) / (b.z - a.z);
+                return 'rgb(' + Math.round(a.r + t * (b.r - a.r)) + ','
+                    + Math.round(a.g + t * (b.g - a.g)) + ','
+                    + Math.round(a.b + t * (b.b - a.b)) + ')';
+            }
+        }
         return COLORS.hoch;
     }
 
@@ -286,7 +290,6 @@
         html += '<h3>' + esc(props.name) + ' <span class="popup-id">(' + esc(props.SOZIALRAUM_ID) + ')</span></h3>';
         html += '<div class="popup-bezirk">Stadtbezirk ' + esc(props.stadtbezirk) + '</div>';
 
-        // Index overview
         html += '<div class="popup-indices">';
         var indices = [
             { label: 'Sozialer Handlungsbedarf', typ: props.typ_sozial },
@@ -306,7 +309,6 @@
         }
         html += '</div>';
 
-        // Detail sections
         for (var s = 0; s < POPUP_SECTIONS.length; s++) {
             var section = POPUP_SECTIONS[s];
             html += '<h4>' + section.title + '</h4>';
@@ -331,6 +333,11 @@
     // -----------------------------------------------------------------------
     var geojsonLayer;
     var averages = {};
+    var stats = {};
+    var geojsonData;
+    var stadtteileLayer;
+    var stadtteileData;
+    var stadtteileLabels;
 
     function onEachFeature(feature, layer) {
         layer.bindTooltip(function () {
@@ -365,7 +372,9 @@
             return response.json();
         })
         .then(function (data) {
+            geojsonData = data;
             averages = data.averages || {};
+            stats = data.stats || {};
             geojsonLayer = L.geoJSON(data, {
                 style: getStyle,
                 onEachFeature: onEachFeature,
@@ -373,6 +382,7 @@
 
             createLegend();
             setupLayerControl();
+            loadStadtteile();
         })
         .catch(function (err) {
             console.error('GeoJSON laden fehlgeschlagen:', err);
@@ -381,12 +391,74 @@
         });
 
     // -----------------------------------------------------------------------
+    // Stadtteile overlay
+    // -----------------------------------------------------------------------
+    function loadStadtteile() {
+        fetch('data/stadtteile.geojson')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data) return;
+                stadtteileData = data;
+                stadtteileLayer = L.geoJSON(data, {
+                    style: {
+                        fillColor: 'transparent',
+                        fillOpacity: 0,
+                        color: '#333',
+                        weight: 2.5,
+                        dashArray: '6,4',
+                    },
+                });
+
+                // Separate label layer with permanent tooltips
+                stadtteileLabels = L.layerGroup();
+                data.features.forEach(function (f) {
+                    var bounds = L.geoJSON(f).getBounds();
+                    var center = bounds.getCenter();
+                    var marker = L.marker(center, {
+                        icon: L.divIcon({
+                            className: 'stadtteil-label-icon',
+                            html: '<span>' + esc(f.properties.Name) + '</span>',
+                            iconSize: null,
+                        }),
+                        interactive: false,
+                    });
+                    stadtteileLabels.addLayer(marker);
+                });
+
+                var labelsToggle = document.getElementById('toggle-labels');
+                labelsToggle.disabled = false;
+
+                document.getElementById('toggle-stadtteile').addEventListener('change', function () {
+                    if (this.checked) {
+                        stadtteileLayer.addTo(map);
+                    } else {
+                        map.removeLayer(stadtteileLayer);
+                        labelsToggle.checked = false;
+                        map.removeLayer(stadtteileLabels);
+                    }
+                });
+
+                labelsToggle.addEventListener('change', function () {
+                    if (this.checked) {
+                        // Auto-enable Stadtteile borders too
+                        if (!map.hasLayer(stadtteileLayer)) {
+                            document.getElementById('toggle-stadtteile').checked = true;
+                            stadtteileLayer.addTo(map);
+                        }
+                        stadtteileLabels.addTo(map);
+                    } else {
+                        map.removeLayer(stadtteileLabels);
+                    }
+                });
+            });
+    }
+
+    // -----------------------------------------------------------------------
     // Layer control
     // -----------------------------------------------------------------------
     function setupLayerControl() {
         var select = document.getElementById('layer-select');
 
-        // Build <optgroup> + <option> from CATEGORIES
         for (var c = 0; c < CATEGORIES.length; c++) {
             var cat = CATEGORIES[c];
             var group = document.createElement('optgroup');
@@ -415,15 +487,35 @@
         updateLegend();
     }
 
+    function fmtNum(v) {
+        return v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+    }
+
     function updateLegend() {
         var container = document.getElementById('legend');
         var html = '<h4>' + esc(LAYER_LABELS[currentLayer]) + '</h4>';
 
-        for (var i = 0; i < TYP_LABELS.length; i++) {
-            var item = TYP_LABELS[i];
-            html += '<div class="legend-item">';
-            html += '<span class="legend-color" style="background:' + COLORS[item.typ] + '"></span>';
-            html += '<span class="legend-label">' + item.label + '</span>';
+        // Gradient bar
+        html += '<div class="legend-gradient"></div>';
+
+        // Tick labels
+        var avg = averages[currentLayer];
+        var s = stats[currentLayer];
+        var hasT = avg != null && s && s.std != null;
+
+        html += '<div class="legend-ticks">';
+        html += '<span>deutlich unter \u00d8</span>';
+        html += '<span>Durchschnitt</span>';
+        html += '<span>deutlich \u00fcber \u00d8</span>';
+        html += '</div>';
+
+        if (hasT) {
+            html += '<div class="legend-values">';
+            html += '<span>' + fmtNum(avg - 1.0 * s.std) + '</span>';
+            html += '<span>' + fmtNum(avg - 0.5 * s.std) + '</span>';
+            html += '<span>' + fmtNum(avg) + '</span>';
+            html += '<span>' + fmtNum(avg + 0.5 * s.std) + '</span>';
+            html += '<span>' + fmtNum(avg + 1.0 * s.std) + '</span>';
             html += '</div>';
         }
 
@@ -434,5 +526,390 @@
 
         container.innerHTML = html;
     }
+
+    // -----------------------------------------------------------------------
+    // Programmatic map rendering (device-independent)
+    // -----------------------------------------------------------------------
+    var TILE_SIZE = 256;
+    var FONT = '-apple-system, "Segoe UI", Roboto, sans-serif';
+
+    function lngToPixel(lng, z) {
+        return ((lng + 180) / 360) * Math.pow(2, z) * TILE_SIZE;
+    }
+
+    function latToPixel(lat, z) {
+        var r = lat * Math.PI / 180;
+        return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Math.pow(2, z) * TILE_SIZE;
+    }
+
+    function hexToRgb(hex) {
+        var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+                 : { r: 0, g: 0, b: 0 };
+    }
+
+    function renderMap(ctx, x, y, w, h, callback) {
+        var bounds = geojsonLayer.getBounds();
+        var pad = 0.003;
+        var south = bounds.getSouth() - pad;
+        var north = bounds.getNorth() + pad;
+        var west = bounds.getWest() - pad;
+        var east = bounds.getEast() + pad;
+
+        var zoom = 1;
+        for (var z = 16; z >= 1; z--) {
+            if (lngToPixel(east, z) - lngToPixel(west, z) <= w &&
+                latToPixel(south, z) - latToPixel(north, z) <= h) {
+                zoom = z; break;
+            }
+        }
+
+        var geoW = lngToPixel(east, zoom) - lngToPixel(west, zoom);
+        var geoH = latToPixel(south, zoom) - latToPixel(north, zoom);
+        var originX = lngToPixel(west, zoom) - (w - geoW) / 2;
+        var originY = latToPixel(north, zoom) - (h - geoH) / 2;
+
+        function geo(lat, lng) {
+            return [lngToPixel(lng, zoom) - originX + x, latToPixel(lat, zoom) - originY + y];
+        }
+
+        var minTX = Math.floor(originX / TILE_SIZE);
+        var maxTX = Math.floor((originX + w) / TILE_SIZE);
+        var maxTiles = Math.pow(2, zoom);
+        var minTY = Math.max(0, Math.floor(originY / TILE_SIZE));
+        var maxTY = Math.min(maxTiles - 1, Math.floor((originY + h) / TILE_SIZE));
+
+        var tileList = [];
+        for (var tx = minTX; tx <= maxTX; tx++) {
+            for (var ty = minTY; ty <= maxTY; ty++) {
+                var wtx = ((tx % maxTiles) + maxTiles) % maxTiles;
+                tileList.push({ tx: tx, ty: ty, ftx: wtx, fty: ty });
+            }
+        }
+
+        var loaded = 0;
+        var tileImgs = {};
+        if (tileList.length === 0) { draw(); return; }
+
+        tileList.forEach(function (t) {
+            var img = new Image();
+            img.crossOrigin = 'anonymous';
+            var s = 'abcd'[(Math.abs(t.ftx) + Math.abs(t.fty)) % 4];
+            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + t.ftx + '/' + t.fty + '.png';
+            img.onload = function () {
+                tileImgs[t.tx + ',' + t.ty] = img;
+                if (++loaded === tileList.length) draw();
+            };
+            img.onerror = function () {
+                if (++loaded === tileList.length) draw();
+            };
+        });
+
+        function draw() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.clip();
+
+            ctx.fillStyle = '#f2efe9';
+            ctx.fillRect(x, y, w, h);
+
+            for (var key in tileImgs) {
+                var parts = key.split(',');
+                var dtx = parseInt(parts[0]), dty = parseInt(parts[1]);
+                ctx.drawImage(tileImgs[key],
+                    dtx * TILE_SIZE - originX + x,
+                    dty * TILE_SIZE - originY + y,
+                    TILE_SIZE, TILE_SIZE);
+            }
+
+            // Draw GeoJSON polygons from raw data
+            var features = geojsonData.features;
+            for (var fi = 0; fi < features.length; fi++) {
+                var feature = features[fi];
+                var props = feature.properties;
+                var zVal = props['z_' + currentLayer];
+
+                ctx.fillStyle = props.unbewohnt ? COLORS.unbewohnt : getColor(zVal);
+                ctx.globalAlpha = props.unbewohnt ? 0.4 : 0.7;
+                ctx.strokeStyle = (zVal != null && zVal >= 1.5) ? '#444' : '#666';
+                ctx.lineWidth = (zVal != null && zVal >= 1.5) ? 2 : 0.5;
+
+                var geom = feature.geometry;
+                var polys = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+
+                for (var p = 0; p < polys.length; p++) {
+                    for (var r = 0; r < polys[p].length; r++) {
+                        var ring = polys[p][r];
+                        ctx.beginPath();
+                        for (var j = 0; j < ring.length; j++) {
+                            var pt = geo(ring[j][1], ring[j][0]);
+                            if (j === 0) ctx.moveTo(pt[0], pt[1]);
+                            else ctx.lineTo(pt[0], pt[1]);
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Draw Stadtteile borders if toggle is on
+            var showStadtteile = document.getElementById('toggle-stadtteile').checked;
+            if (showStadtteile && stadtteileData) {
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([6, 4]);
+                ctx.fillStyle = 'transparent';
+
+                var stFeatures = stadtteileData.features;
+                for (var si = 0; si < stFeatures.length; si++) {
+                    var stGeom = stFeatures[si].geometry;
+                    var stPolys = stGeom.type === 'MultiPolygon' ? stGeom.coordinates : [stGeom.coordinates];
+
+                    for (var sp = 0; sp < stPolys.length; sp++) {
+                        for (var sr = 0; sr < stPolys[sp].length; sr++) {
+                            var sRing = stPolys[sp][sr];
+                            ctx.beginPath();
+                            for (var sj = 0; sj < sRing.length; sj++) {
+                                var sPt = geo(sRing[sj][1], sRing[sj][0]);
+                                if (sj === 0) ctx.moveTo(sPt[0], sPt[1]);
+                                else ctx.lineTo(sPt[0], sPt[1]);
+                            }
+                            ctx.closePath();
+                            ctx.stroke();
+                        }
+                    }
+                }
+                ctx.setLineDash([]);
+
+                // Draw Stadtteil names if label toggle is on
+                var showLabels = document.getElementById('toggle-labels').checked;
+                if (showLabels) {
+                    ctx.font = 'bold 11px ' + FONT;
+                    ctx.fillStyle = '#222';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    for (var li = 0; li < stFeatures.length; li++) {
+                        var stBounds = L.geoJSON(stFeatures[li]).getBounds();
+                        var ctr = stBounds.getCenter();
+                        var cp = geo(ctr.lat, ctr.lng);
+                        // White halo
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 3;
+                        ctx.lineJoin = 'round';
+                        ctx.strokeText(stFeatures[li].properties.Name, cp[0], cp[1]);
+                        ctx.fillText(stFeatures[li].properties.Name, cp[0], cp[1]);
+                    }
+                    ctx.textAlign = 'start';
+                    ctx.textBaseline = 'alphabetic';
+                }
+            }
+
+            ctx.globalAlpha = 1;
+            ctx.restore();
+            callback();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared legend drawing on canvas
+    // -----------------------------------------------------------------------
+    function drawLegendOnCanvas(ctx, x, y, w, fontSize) {
+        var barH = fontSize;
+        var grad = ctx.createLinearGradient(x, 0, x + w, 0);
+        grad.addColorStop(0, '#1a9850');
+        grad.addColorStop(0.25, '#91cf60');
+        grad.addColorStop(0.5, '#fee08b');
+        grad.addColorStop(0.75, '#fc8d59');
+        grad.addColorStop(1, '#d73027');
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, y, w, barH);
+        ctx.strokeStyle = '#ccc';
+        ctx.strokeRect(x, y, w, barH);
+
+        // Tick labels
+        var labelY = y + barH + fontSize + 2;
+        ctx.fillStyle = '#555';
+        ctx.font = Math.round(fontSize * 0.75) + 'px ' + FONT;
+        ctx.textAlign = 'left';
+        ctx.fillText('deutlich unter \u00d8', x, labelY);
+        ctx.textAlign = 'center';
+        ctx.fillText('Durchschnitt', x + w / 2, labelY);
+        ctx.textAlign = 'right';
+        ctx.fillText('deutlich \u00fcber \u00d8', x + w, labelY);
+
+        // Threshold values
+        var cavg = averages[currentLayer];
+        var s = stats[currentLayer];
+        if (cavg != null && s && s.std != null) {
+            var valY = labelY + fontSize * 0.9;
+            ctx.fillStyle = '#999';
+            ctx.font = Math.round(fontSize * 0.7) + 'px ' + FONT;
+            var ticks = [-1.0, -0.5, 0, 0.5, 1.0];
+            var positions = [0, 0.25, 0.5, 0.75, 1.0];
+            for (var i = 0; i < ticks.length; i++) {
+                ctx.textAlign = 'center';
+                ctx.fillText(fmtNum(cavg + ticks[i] * s.std), x + positions[i] * w, valY);
+            }
+        }
+
+        // Unbewohnt
+        var ubY = labelY + fontSize * 1.8;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = COLORS.unbewohnt;
+        ctx.fillRect(x, ubY - fontSize * 0.6, fontSize, fontSize - 2);
+        ctx.strokeStyle = '#ccc';
+        ctx.strokeRect(x, ubY - fontSize * 0.6, fontSize, fontSize - 2);
+        ctx.fillStyle = '#555';
+        ctx.font = Math.round(fontSize * 0.85) + 'px ' + FONT;
+        ctx.fillText('keine Daten (unbewohnt)', x + fontSize + 6, ubY);
+    }
+
+    // -----------------------------------------------------------------------
+    // PDF Export
+    // -----------------------------------------------------------------------
+    function exportPDF() {
+        var btn = document.getElementById('export-pdf');
+        btn.disabled = true;
+        btn.textContent = 'Wird erstellt\u2026';
+
+        var mapPxW = 2400, mapPxH = 1400;
+        var mapCanvas = document.createElement('canvas');
+        mapCanvas.width = mapPxW;
+        mapCanvas.height = mapPxH;
+        var mCtx = mapCanvas.getContext('2d');
+
+        renderMap(mCtx, 0, 0, mapPxW, mapPxH, function () {
+            var jsPDF = window.jspdf.jsPDF;
+            var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            var pw = 297, ph = 210;
+            var margin = 10;
+
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(14);
+            pdf.text('Quartiersatlas Duesseldorf - ' + LAYER_LABELS[currentLayer], margin, margin + 5);
+
+            var mapTop = margin + 10;
+            var legendH = 28;
+            var mapH = ph - mapTop - legendH - margin - 6;
+            var imgRatio = mapPxW / mapPxH;
+            var fitW = pw - 2 * margin;
+            var fitH = fitW / imgRatio;
+            if (fitH > mapH) { fitH = mapH; fitW = fitH * imgRatio; }
+            var mapX = margin + (pw - 2 * margin - fitW) / 2;
+            pdf.addImage(mapCanvas.toDataURL('image/png'), 'PNG', mapX, mapTop, fitW, fitH);
+
+            var ly = mapTop + fitH + 4;
+
+            // Gradient bar as canvas image
+            var gradCanvas = document.createElement('canvas');
+            gradCanvas.width = 600; gradCanvas.height = 10;
+            var gCtx = gradCanvas.getContext('2d');
+            var grd = gCtx.createLinearGradient(0, 0, 600, 0);
+            grd.addColorStop(0, '#1a9850');
+            grd.addColorStop(0.25, '#91cf60');
+            grd.addColorStop(0.5, '#fee08b');
+            grd.addColorStop(0.75, '#fc8d59');
+            grd.addColorStop(1, '#d73027');
+            gCtx.fillStyle = grd;
+            gCtx.fillRect(0, 0, 600, 10);
+
+            var barW = pw - 2 * margin;
+            pdf.addImage(gradCanvas.toDataURL('image/png'), 'PNG', margin, ly, barW, 4);
+
+            // Labels
+            ly += 7;
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(7);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text('deutlich unter Oe', margin, ly);
+            pdf.text('Durchschnitt', pw / 2, ly, { align: 'center' });
+            pdf.text('deutlich ueber Oe', pw - margin, ly, { align: 'right' });
+
+            // Threshold values
+            var pdfAvg = averages[currentLayer];
+            var pdfS = stats[currentLayer];
+            if (pdfAvg != null && pdfS && pdfS.std != null) {
+                ly += 3.5;
+                pdf.setFontSize(6.5);
+                pdf.setTextColor(130, 130, 130);
+                var ticks = [-1.0, -0.5, 0, 0.5, 1.0];
+                var positions = [0, 0.25, 0.5, 0.75, 1.0];
+                for (var i = 0; i < ticks.length; i++) {
+                    pdf.text(fmtNum(pdfAvg + ticks[i] * pdfS.std),
+                        margin + positions[i] * barW, ly, { align: 'center' });
+                }
+            }
+
+            // Unbewohnt
+            ly += 5;
+            var ubRgb = hexToRgb(COLORS.unbewohnt);
+            pdf.setFillColor(ubRgb.r, ubRgb.g, ubRgb.b);
+            pdf.rect(margin, ly - 2.5, 5, 3.5, 'F');
+            pdf.setDrawColor(180, 180, 180);
+            pdf.rect(margin, ly - 2.5, 5, 3.5, 'S');
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(7);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text('keine Daten (unbewohnt)', margin + 7, ly);
+
+            pdf.setFontSize(6.5);
+            pdf.setTextColor(120, 120, 120);
+            pdf.text('Datenquellen: Quartiersatlas 2024 - LH Duesseldorf | Open Data Duesseldorf | OpenStreetMap | CARTO', margin, ph - 4);
+            pdf.setTextColor(0, 0, 0);
+
+            pdf.save('sozialindex_' + currentLayer + '.pdf');
+            btn.disabled = false;
+            btn.textContent = 'PDF Export';
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Image Export (Instagram 4:5)
+    // -----------------------------------------------------------------------
+    function exportImage() {
+        var btn = document.getElementById('export-img');
+        btn.disabled = true;
+        btn.textContent = 'Wird erstellt\u2026';
+
+        var W = 1080, H = 1350;
+        var out = document.createElement('canvas');
+        out.width = W;
+        out.height = H;
+        var ctx = out.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, W, H);
+
+        var mapTop = 100;
+        var mapH = H - mapTop - 150;
+
+        renderMap(ctx, 0, mapTop, W, mapH, function () {
+            ctx.fillStyle = '#222';
+            ctx.font = 'bold 36px ' + FONT;
+            ctx.fillText('Quartiersatlas D\u00fcsseldorf', 40, 48);
+            ctx.font = '28px ' + FONT;
+            ctx.fillStyle = '#666';
+            ctx.fillText(LAYER_LABELS[currentLayer], 40, 82);
+
+            drawLegendOnCanvas(ctx, 30, mapTop + mapH + 16, W - 60, 18, true);
+
+            ctx.fillStyle = '#aaa';
+            ctx.font = '13px ' + FONT;
+            ctx.fillText('Quartiersatlas 2024 \u2013 LH D\u00fcsseldorf | Open Data D\u00fcsseldorf | \u00a9 OpenStreetMap \u00a9 CARTO', 30, H - 16);
+
+            var link = document.createElement('a');
+            link.download = 'sozialindex_' + currentLayer + '.png';
+            link.href = out.toDataURL('image/png');
+            link.click();
+
+            btn.disabled = false;
+            btn.textContent = 'Bild Export';
+        });
+    }
+
+    document.getElementById('export-pdf').addEventListener('click', exportPDF);
+    document.getElementById('export-img').addEventListener('click', exportImage);
 
 })();

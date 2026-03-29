@@ -15,6 +15,16 @@
     <div id="layer-control">
         <h3>Indikator</h3>
         <select id="layer-select"></select>
+        <label class="toggle-row">
+            <input type="checkbox" id="toggle-stadtteile">
+            <span>Stadtteilgrenzen</span>
+        </label>
+        <label class="toggle-row">
+            <input type="checkbox" id="toggle-labels" disabled>
+            <span>Stadtteilnamen</span>
+        </label>
+        <button id="export-pdf" title="Karte als PDF exportieren">PDF Export</button>
+        <button id="export-img" title="Karte als Bild exportieren (4:5, Instagram)">Bild Export</button>
     </div>
 
     <div id="legend"></div>
@@ -28,6 +38,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

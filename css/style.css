@@ -53,6 +53,63 @@ html, body {
     cursor: pointer;
 }
 
+.toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+}
+
+#export-pdf {
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: #3b82f6;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+#export-pdf:hover {
+    background: #2563eb;
+}
+
+#export-pdf:disabled,
+#export-img:disabled {
+    background: #93c5fd;
+    cursor: wait;
+}
+
+#export-img {
+    width: 100%;
+    margin-top: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: #8b5cf6;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+#export-img:hover {
+    background: #7c3aed;
+}
+
 /* === Legend === */
 #legend {
     position: absolute;
@@ -71,6 +128,30 @@ html, body {
     font-weight: 600;
     margin-bottom: 8px;
     color: #555;
+}
+
+.legend-gradient {
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background: linear-gradient(to right, #1a9850, #91cf60, #fee08b, #fc8d59, #d73027);
+    margin-bottom: 4px;
+}
+
+.legend-ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #555;
+    margin-bottom: 2px;
+}
+
+.legend-values {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #888;
+    margin-bottom: 6px;
 }
 
 .legend-item {
@@ -245,4 +326,21 @@ html, body {
 .sr-tooltip .tooltip-id {
     color: #888;
     font-size: 11px;
+}
+
+/* === Stadtteil overlay labels === */
+.stadtteil-label-icon {
+    background: none;
+    border: none;
+    white-space: nowrap;
+}
+
+.stadtteil-label-icon span {
+    display: inline-block;
+    transform: translate(-50%, -50%);
+    font-size: 11px;
+    font-weight: 700;
+    color: #222;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+    pointer-events: none;
 }
